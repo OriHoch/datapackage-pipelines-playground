@@ -1,0 +1,3 @@
+id: "noise"
+runParams: "./noise"
+pipelineGsUrl: gs://hasadna-oknesset-dpp-playground/pipelines/qPitLsj6Ya1ogkyxzHC9mNOD4dReM8Sc/pipeline

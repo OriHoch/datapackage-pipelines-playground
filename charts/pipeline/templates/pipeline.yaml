@@ -1,0 +1,60 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pipeline-{{ .Values.id }}
+  labels:
+    app: pipeline
+spec:
+  containers:
+  - name: pipeline
+    image: frictionlessdata/datapackage-pipelines
+    command:
+    - sh
+    - "-c"
+    - |
+      while ! [ -e /state/synced ]; do sleep 1; done
+      cd /pipeline
+      dpp run {{ .Values.runParams }}
+      RES=$?
+      touch /state/pipelines_complete
+      sleep 3600
+      exit $RES
+    resources: {{ .Values.resources }}
+    volumeMounts:
+    - name: pipeline
+      mountPath: /pipeline
+    - name: state
+      mountPath: /state
+  - name: sync
+    image: google/cloud-sdk:alpine
+    command:
+    - bash
+    - "-c"
+    - |
+      gcloud auth activate-service-account --key-file=/sync-secrets/key.json &&\
+      gsutil cp -R {{ .Values.pipelineGsUrl }}/'*' /pipeline/ &&\
+      touch /state/synced &&\
+      echo "Waiting for pipelines" &&\
+      while ! [ -e /state/pipelines_complete ]; do sleep 1; done
+      [ -e /pipeline/data ] &&\
+      echo "Syncing data directory" &&\
+      gsutil cp -R /pipeline/data {{ .Values.pipelineGsUrl }}/
+      gsutil cp /state/pipelines_complete {{ .Values.pipelineGsUrl }}/
+      sleep 3600
+    resources: {{ .Values.syncResources }}
+    volumeMounts:
+    - name: pipeline
+      mountPath: /pipeline
+    - name: state
+      mountPath: /state
+    - name: sync-secrets
+      mountPath: /sync-secrets
+      readOnly: true
+  volumes:
+  - name: pipeline
+    emptyDir: {}
+  - name: state
+    emptyDir: {}
+  - name: sync-secrets
+    secret:
+      secretName: dpp-playground-sync
